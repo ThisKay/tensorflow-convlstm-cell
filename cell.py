@@ -35,21 +35,35 @@ class ConvLSTMCell(tf.nn.rnn_cell.RNNCell):
     return self._size
 
   def call(self, x, state):
+    # x=[b32, t100, w640, h480, c3]
     c, h = state
-
+    # 拼接到通道维度上去
+    # [b32, t100, w640, h480, c3+hidden_dim]
     x = tf.concat([x, h], axis=self._feature_axis)
+    # 获取当前通道维度
     n = x.shape[-1].value
+    # 卷积核数量翻4倍
     m = 4 * self._filters if self._filters > 1 else 4
+    # 获取卷积参数
     W = tf.get_variable('kernel', self._kernel + [n, m])
+    # 进行卷积，获得输出y
+    # 输出结果维度[b32, t100, w640, h480, c=m=4*filter]
     y = tf.nn.convolution(x, W, 'SAME', data_format=self._data_format)
+
+
+    # 默认是True
     if not self._normalize:
       y += tf.get_variable('bias', [m], initializer=tf.zeros_initializer())
+    # 平均分成四份
     j, i, f, o = tf.split(y, 4, axis=self._feature_axis)
 
+    # 默认是True
     if self._peephole:
       i += tf.get_variable('W_ci', c.shape[1:]) * c
       f += tf.get_variable('W_cf', c.shape[1:]) * c
 
+    # 默认是True
+    # 进行层间归一化
     if self._normalize:
       j = tf.contrib.layers.layer_norm(j)
       i = tf.contrib.layers.layer_norm(i)
@@ -67,6 +81,7 @@ class ConvLSTMCell(tf.nn.rnn_cell.RNNCell):
       c = tf.contrib.layers.layer_norm(c)
 
     o = tf.sigmoid(o)
+    # 默认tf.tanh
     h = o * self._activation(c)
 
     state = tf.nn.rnn_cell.LSTMStateTuple(c, h)
